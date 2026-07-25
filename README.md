@@ -24,7 +24,7 @@ adding a new detector doesn't require rewriting the app. See
 | Gamma camera (photo + spectrum)  |    ✅     | ⏳ planned                      |
 | Cs-137 food-activity mode        |    ✅     | ⏳ planned                      |
 | Search mode (audio)              |    ✅     | ⏳ planned                      |
-| Supported hardware               | RadiaCode only | Pluggable — replay driver today, real drivers in progress |
+| Supported hardware               | RadiaCode only | Pluggable — replay driver + GammaGuard CT007-N today, more in progress |
 | Platforms                        | iOS/Android/Windows | CLI/library today (Linux/macOS/Windows via Python) |
 | License                          | Proprietary | MIT |
 
