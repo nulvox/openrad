@@ -7,12 +7,14 @@ against this registry without needing to modify openrad itself.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from openrad.devices.base import Device
 
 _REGISTRY: dict[str, type[Device]] = {}
 
 
-def register(name: str):
+def register(name: str) -> Callable[[type[Device]], type[Device]]:
     """Class decorator that registers a Device driver under `name`."""
 
     def _wrap(cls: type[Device]) -> type[Device]:

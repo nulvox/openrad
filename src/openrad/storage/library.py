@@ -30,7 +30,7 @@ class Library:
         *,
         track: Track | None = None,
         spectrum: Spectrum | None = None,
-        device_info: dict | None = None,
+        device_info: dict[str, object] | None = None,
     ) -> Path:
         session_dir = self.root / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
