@@ -10,7 +10,8 @@ from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 
-from openrad.core.models import Track, TrackPoint
+from openrad.analysis.isotopes import DEFAULT_DATABASE_PATH
+from openrad.core.models import Spectrum, Track, TrackPoint
 from openrad.devices import registry
 from openrad.devices.replay import ReplayDevice  # noqa: F401  (registers "replay" driver)
 from openrad.storage.library import Library
@@ -18,6 +19,18 @@ from openrad.storage.spectrogram import load_spectrogram_dir
 
 app = typer.Typer(help="openrad: an open-source toolkit for radiation detectors.")
 console = Console()
+
+
+def _read_spectrum_file(file: Path) -> Spectrum:
+    """Load a Spectrum, detecting the format (.spe vs. Theremino) from the extension."""
+    if file.suffix.lower() == ".spe":
+        from openrad.storage.spe import read_spe
+
+        return read_spe(file)
+
+    from openrad.storage.theremino import read_theremino
+
+    return read_theremino(file)
 
 
 @app.command("devices")
@@ -99,6 +112,83 @@ def spectrogram(
     spectrogram_data = load_spectrogram_dir(directory)
     render_spectrogram_png(spectrogram_data, out, energy_axis=not channel_axis)
     console.print(f"Wrote {out}")
+
+
+@app.command()
+def spectrum(
+    file: Path = typer.Argument(
+        ..., help="Spectrum file: .spe, or a Theremino MCA histogram export"
+    ),
+    out: Path = typer.Option(Path("spectrum.png"), help="Output PNG path"),
+    channel_axis: bool = typer.Option(
+        False, help="Plot raw channel number instead of calibrated energy (keV)"
+    ),
+) -> None:
+    """Render a single spectrum (.spe or Theremino export) as a PNG histogram."""
+    try:
+        from openrad.viz.spectrum import render_spectrum_png
+    except ImportError:
+        console.print('Rendering needs the "viz" extra: pip install "openrad[viz]"')
+        raise typer.Exit(code=1) from None
+
+    spectrum_data = _read_spectrum_file(file)
+    render_spectrum_png(spectrum_data, out, energy_axis=not channel_axis)
+    console.print(f"Wrote {out}")
+
+
+@app.command()
+def identify(
+    file: Path = typer.Argument(
+        ..., help="Spectrum file: .spe, or a Theremino MCA histogram export"
+    ),
+    database: Path = typer.Option(
+        DEFAULT_DATABASE_PATH,
+        help="SandiaDecay XML database path (see scripts/fetch_isotope_database.py)",
+    ),
+    tolerance: float = typer.Option(10.0, help="Peak-to-reference-line match tolerance, in keV"),
+    top: int = typer.Option(5, help="Number of candidate isotopes to show"),
+) -> None:
+    """Suggest candidate isotopes by matching spectrum peaks against known gamma lines.
+
+    This is a rough starting point (local-maxima peak finding + energy
+    matching), not a lab-grade identification — treat results as leads to
+    investigate, not conclusions.
+    """
+    from openrad.analysis.identify import find_peaks
+    from openrad.analysis.identify import identify as identify_isotopes
+    from openrad.analysis.isotopes import load_isotope_library
+
+    try:
+        library = load_isotope_library(database)
+    except FileNotFoundError as exc:
+        console.print(str(exc))
+        raise typer.Exit(code=1) from None
+
+    spectrum_data = _read_spectrum_file(file)
+    peaks = find_peaks(spectrum_data)
+    if not peaks:
+        console.print("No significant peaks found.")
+        raise typer.Exit(code=0)
+
+    energies = ", ".join(f"{p.energy_kev:.1f} keV" for p in peaks)
+    console.print(f"Found {len(peaks)} peak(s): {energies}")
+
+    candidates = identify_isotopes(spectrum_data, library, tolerance_kev=tolerance, top_n=top)
+    if not candidates:
+        console.print("No matching isotopes in the database.")
+        raise typer.Exit(code=0)
+
+    table = Table(title="Candidate isotopes")
+    table.add_column("isotope")
+    table.add_column("score", justify="right")
+    table.add_column("matched lines (keV)")
+    for candidate in candidates:
+        table.add_row(
+            candidate.isotope,
+            f"{candidate.score:.2f}",
+            ", ".join(f"{e:.1f}" for e in candidate.matched_lines_kev),
+        )
+    console.print(table)
 
 
 def main() -> None:

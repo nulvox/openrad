@@ -20,7 +20,7 @@ adding a new detector doesn't require rewriting the app. See
 | GPS radiation mapping (track)    |    ✅     | ⚠️ track capture + `.gpx` export; map rendering planned |
 | Gamma spectroscopy (capture)     |    ✅     | ✅ `.spe` capture/export         |
 | Spectrogram view                 |    ✅     | ✅ static PNG heatmap (no GUI needed) |
-| Isotope identification           |    ✅     | ⏳ planned                      |
+| Isotope identification           |    ✅     | ✅ peak matching against a fetched reference database |
 | Gamma camera (photo + spectrum)  |    ✅     | ⏳ planned                      |
 | Cs-137 food-activity mode        |    ✅     | ⏳ planned                      |
 | Search mode (audio)              |    ✅     | ⏳ planned                      |
@@ -30,26 +30,50 @@ adding a new detector doesn't require rewriting the app. See
 
 ## Quickstart
 
+Requires [uv](https://docs.astral.sh/uv/). On NixOS (where manylinux wheels
+like numpy/matplotlib/ruff won't run against the system's libs out of the
+box), run `nix develop` first — it drops you into a shell with the right
+`LD_LIBRARY_PATH` and a nixpkgs-native `ruff`, then `uv` works normally.
+
 ```bash
-pip install -e ".[dev]"
+uv sync --extra dev
 
 # List registered device drivers
-openrad devices
+uv run openrad devices
 
 # Stream a sample survey as if from a live device
-openrad replay examples/sample_session.csv --speed 0
+uv run openrad replay examples/sample_session.csv --speed 0
 ```
 
 Each `replay` run saves a session (GPS track as `.gpx`) to
 `~/.openrad/library/<session_id>/` unless run with `--no-save`.
 
 ```bash
-pip install -e ".[viz]"  # matplotlib + numpy, only needed for rendering
+uv sync --extra viz  # matplotlib + numpy, only needed for rendering
 
 # Render a directory of .spe frames (one spectrum per time slice) as a
 # spectrogram: time on x, energy on y, color = counts (log-scaled)
-openrad spectrogram examples/spectrogram --out spectrogram.png
+uv run openrad spectrogram examples/spectrogram --out spectrogram.png
+
+# Render a single spectrum (.spe or a Theremino MCA export) as a PNG histogram
+uv run openrad spectrum tests/fixtures/theremino/tc99mfinal.txt --out spectrum.png
 ```
+
+```bash
+# Isotope ID needs a reference database, which isn't vendored in this repo
+# (it's ~6 MB of LGPL-2.1-licensed nuclear data — see the script for why).
+# Fetch your own copy once:
+uv run python scripts/fetch_isotope_database.py
+
+# Then match spectrum peaks against it:
+uv run openrad identify tests/fixtures/theremino/tc99mfinal.txt
+```
+
+Identification is a simple local-maxima peak finder plus energy matching
+against known gamma lines (including short-lived daughters folded into
+their parent via a secular-equilibrium assumption — see
+`openrad/analysis/isotopes.py`) — a starting point for further
+investigation, not a lab-grade result.
 
 There's no dedicated spectrogram file format — a spectrogram is just an
 ordered sequence of spectra, so a directory of `frame_00.spe`, `frame_01.spe`,
@@ -60,10 +84,10 @@ expects.
 ## Development
 
 ```bash
-pip install -e ".[dev]"
-ruff check .
-mypy
-pytest
+uv sync --extra dev
+uv run ruff check .
+uv run mypy
+uv run pytest
 ```
 
 ## Project layout
@@ -72,12 +96,13 @@ pytest
 src/openrad/
   core/      Data model: Reading, Spectrum, Spectrogram, Track, DeviceInfo
   devices/   Device interface, registry, and drivers (replay driver included)
-  storage/   .spe / .gpx read-write + local library + spectrogram loading
-  viz/       PNG rendering (spectrogram heatmap), needs the "viz" extra
+  storage/   .spe / .gpx / Theremino MCA read-write + local library + spectrogram loading
+  analysis/  Peak finding + isotope identification (needs a fetched reference database)
+  viz/       PNG rendering (spectrum + spectrogram heatmap), needs the "viz" extra
   cli/       `openrad` command-line entrypoint
 tests/       pytest suite
 examples/    sample CSV + a demo spectrogram for the replay/spectrogram commands
-scripts/     one-off dev scripts (e.g. regenerating example data)
+scripts/     one-off dev scripts (e.g. regenerating example data, fetching isotope data)
 docs/        architecture and roadmap
 ```
 
