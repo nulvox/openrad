@@ -10,6 +10,8 @@
 - [x] Local library (per-session directory storage)
 - [x] CLI: `openrad devices`, `openrad replay <file>`
 - [x] Test suite + CI (ruff, mypy, pytest)
+- [x] Spectrogram view as a static PNG heatmap (`openrad spectrogram <dir>`,
+      `viz/spectrogram.py`) — see below, pulled forward from Phase 3
 
 ## Phase 2 — real hardware
 
@@ -24,10 +26,12 @@
 
 - [ ] Isotope identification: peak-finding + matching against a nuclide
       energy-line library (start with Cs-137, Co-60, K-40, Am-241, Na-22)
-- [ ] Spectrogram view (time series of spectra, as RadiaCode's software does)
 - [ ] N42.42 XML export, for interop with InterSpec and other institutional
       tools
 - [ ] Cs-137 food-activity screening mode
+- [ ] Live spectrogram capture: build a `Spectrogram` directly from a
+      `Device.stream()`/`read_spectrum()` session instead of only from a
+      pre-existing directory of `.spe` frames
 
 ## Phase 4 — UI
 

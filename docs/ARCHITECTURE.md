@@ -6,7 +6,8 @@
 devices/    Device interface + registry + drivers (real hardware or replay)
 core/       Data model shared by every layer (Reading, Spectrum, Track, ...)
 storage/    Local library + file format readers/writers (.spe, .gpx)
-cli/        Thin CLI wiring devices -> a live dashboard -> storage
+viz/        Headless rendering (PNG output), e.g. the spectrogram heatmap
+cli/        Thin CLI wiring devices -> a live dashboard -> storage/viz
 ```
 
 Nothing above `core/` depends on a specific device, and nothing in `devices/`
@@ -50,6 +51,8 @@ mostly porting/wrapping, not protocol archaeology.
 
 - `Reading` — one instantaneous sample (cps, dose_rate, optional GPS).
 - `Spectrum` — one accumulated gamma spectrum (channel counts + calibration).
+- `Spectrogram` / `SpectrogramFrame` — an ordered sequence of spectra (a
+  Spectrum per time slice), the data behind a spectrogram plot.
 - `Track` / `TrackPoint` — an ordered sequence of geotagged samples.
 - `DeviceInfo` — static identity returned by `connect()` (driver, model,
   serial, firmware).
@@ -73,9 +76,30 @@ driver, not exposed outward.
   inspect, sync, or back up; a session-indexed SQLite layer can be added
   later without changing the on-disk file formats.
 
+## Spectrogram storage and rendering
+
+A spectrogram doesn't get its own file format: it's just a time-ordered
+sequence of spectra, and `.spe` is already openrad's spectrum format, so a
+directory of `frame_00.spe`, `frame_01.spe`, ... *is* the spectrogram —
+`storage/spectrogram.load_spectrogram_dir()` reads the whole directory back
+into a `Spectrogram`. `viz/spectrogram.render_spectrogram_png()` then renders
+that as a static PNG heatmap (time × energy, color = log-scaled counts) using
+matplotlib's headless `Agg` backend — no display or GUI required, which fits
+a CLI/library-first tool. Color uses a single-hue sequential ramp (light to
+dark blue), never a rainbow/jet colormap, since counts are a magnitude, not a
+category.
+
+`matplotlib`/`numpy` are an optional `viz` extra (`pip install
+"openrad[viz]"`), not a base dependency, so headless/embedded uses of
+`openrad` that never render anything stay lightweight. The CLI's
+`spectrogram` command imports `viz.spectrogram` lazily and prints an install
+hint if the extra isn't present, rather than making the whole CLI fail to
+import.
+
 ## CLI
 
 `cli/main.py` is intentionally thin: it wires a `Device` to a `rich`-based
-live table and, at the end, to `Library.save_session()`. It should stay thin
-— feature logic (isotope ID, mapping, etc.) belongs in new modules under
-`core/` or a new top-level package, not in the CLI file itself.
+live table and, at the end, to `Library.save_session()` (or, for
+`spectrogram`, a loader to a renderer). It should stay thin — feature logic
+(isotope ID, mapping, etc.) belongs in new modules under `core/`, `storage/`,
+or `viz/`, not in the CLI file itself.

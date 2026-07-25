@@ -14,6 +14,7 @@ from openrad.core.models import Track, TrackPoint
 from openrad.devices import registry
 from openrad.devices.replay import ReplayDevice  # noqa: F401  (registers "replay" driver)
 from openrad.storage.library import Library
+from openrad.storage.spectrogram import load_spectrogram_dir
 
 app = typer.Typer(help="openrad: an open-source toolkit for radiation detectors.")
 console = Console()
@@ -76,6 +77,28 @@ def replay(
         library = Library(library_dir)
         session_dir = library.save_session(session_id, track=track, device_info=vars(info))
         console.print(f"Saved session to {session_dir}")
+
+
+@app.command()
+def spectrogram(
+    directory: Path = typer.Argument(
+        ..., help="Directory of *.spe frame files, one per time slice"
+    ),
+    out: Path = typer.Option(Path("spectrogram.png"), help="Output PNG path"),
+    channel_axis: bool = typer.Option(
+        False, help="Plot raw channel number instead of calibrated energy (keV)"
+    ),
+) -> None:
+    """Render a time series of spectra (a directory of .spe files) as a PNG heatmap."""
+    try:
+        from openrad.viz.spectrogram import render_spectrogram_png
+    except ImportError:
+        console.print('Rendering needs the "viz" extra: pip install "openrad[viz]"')
+        raise typer.Exit(code=1) from None
+
+    spectrogram_data = load_spectrogram_dir(directory)
+    render_spectrogram_png(spectrogram_data, out, energy_axis=not channel_axis)
+    console.print(f"Wrote {out}")
 
 
 def main() -> None:

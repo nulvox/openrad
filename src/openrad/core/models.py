@@ -45,6 +45,36 @@ class Spectrum:
 
 
 @dataclass
+class SpectrogramFrame:
+    """One time-sliced spectrum within a Spectrogram."""
+
+    timestamp: datetime
+    counts: list[int]
+
+
+@dataclass
+class Spectrogram:
+    """A time series of spectra: the raw data behind a spectrogram plot.
+
+    Unlike Spectrum (one accumulated measurement), a Spectrogram is many
+    short spectra recorded back to back, so intensity changes over time are
+    visible per energy channel — e.g. a source passing by.
+    """
+
+    name: str
+    calibration: tuple[float, float, float] = (0.0, 3.0, 0.0)
+    frames: list[SpectrogramFrame] = field(default_factory=list)
+
+    def add(self, frame: SpectrogramFrame) -> None:
+        self.frames.append(frame)
+
+    def energy_of_channel(self, channel: int) -> float:
+        """Convert a channel number to keV using the quadratic calibration."""
+        a0, a1, a2 = self.calibration
+        return a0 + a1 * channel + a2 * channel * channel
+
+
+@dataclass
 class TrackPoint:
     """A single geotagged dose-rate sample along a Track."""
 
