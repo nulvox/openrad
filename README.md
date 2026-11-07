@@ -1,85 +1,150 @@
 # openrad
 
-An open-source toolkit for radiation detectors — a pluggable device driver
-layer, spectrum/track capture, and a local library — built as an open
-alternative to closed vendor software such as [RadiaCode's
-apps](https://www.radiacode.com/software).
+[![CI](https://github.com/nulvox/openrad/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nulvox/openrad/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2ea44f)](LICENSE)
 
-Unlike RadiaCode's software, openrad isn't tied to one vendor's hardware:
-device support is a driver interface (`openrad.devices.base.Device`), so
-adding a new detector doesn't require rewriting the app. See
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how that's structured, and
-[docs/ROADMAP.md](docs/ROADMAP.md) for what's built vs. planned.
+**openrad is a modular Python framework and CLI for radiation-detector hardware, gamma-spectrum analysis, and geotagged time-series telemetry.** It turns vendor-specific or replayed measurements into a small, typed domain model, then routes them to open file formats, a local session library, analysis tools, and headless plots.
 
-## Status vs. RadiaCode's software
+The project currently supports hardware-free CSV replay and live Bluetooth LE streaming from the GammaGuard CT007-N, plus `.spe`/Theremino spectrum import, GPX export, spectrograms, and reference-library peak matching. It is an early `0.1.x` project—not a calibrated radiation-safety instrument or a substitute for professional analysis.
 
-| Feature                          | RadiaCode | openrad                        |
-| --------------------------------- | :-------: | :------------------------------ |
-| Live dashboard                   |    ✅     | ✅ (CLI)                        |
-| Data logging / library           |    ✅     | ✅                               |
-| GPS radiation mapping (track)    |    ✅     | ⚠️ track capture + `.gpx` export; map rendering planned |
-| Gamma spectroscopy (capture)     |    ✅     | ✅ `.spe` capture/export         |
-| Spectrogram view                 |    ✅     | ✅ static PNG heatmap (no GUI needed) |
-| Isotope identification           |    ✅     | ✅ peak matching against a fetched reference database |
-| Gamma camera (photo + spectrum)  |    ✅     | ⏳ planned                      |
-| Cs-137 food-activity mode        |    ✅     | ⏳ planned                      |
-| Search mode (audio)              |    ✅     | ⏳ planned                      |
-| Supported hardware               | RadiaCode only | Pluggable — replay driver + GammaGuard CT007-N today, more in progress |
-| Platforms                        | iOS/Android/Windows | CLI/library today (Linux/macOS/Windows via Python) |
-| License                          | Proprietary | MIT |
+## See it work
+
+```console
+$ uv run openrad devices
+- ct007n
+- replay
+
+$ uv run openrad replay examples/sample_session.csv --speed 0 --plain --no-save
+openrad live — CSV Replay
+09:00:00  cps=  4.80  dose=  0.110 uSv/h  lat=52.52000  lon=13.40450
+09:00:02  cps=  5.10  dose=  0.120 uSv/h  lat=52.52005  lon=13.40455
+09:00:08  cps=  9.70  dose=  0.230 uSv/h  lat=52.52020  lon=13.40470
+09:00:10  cps= 14.20  dose=  0.340 uSv/h  lat=52.52025  lon=13.40475
+09:00:18  cps=  4.90  dose=  0.110 uSv/h  lat=52.52045  lon=13.40495
+
+$ uv run openrad spectrum tests/fixtures/theremino/tc99mfinal.txt \
+    --out docs/assets/sample-spectrum.png
+Wrote docs/assets/sample-spectrum.png
+
+$ uv run openrad spectrogram examples/spectrogram \
+    --out docs/assets/sample-spectrogram.png
+Wrote docs/assets/sample-spectrogram.png
+```
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/sample-spectrum.png" alt="Gamma spectrum rendered from a Theremino MCA fixture"></td>
+    <td width="50%"><img src="docs/assets/sample-spectrogram.png" alt="Time-resolved gamma spectrogram rendered from example SPE frames"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Theremino MCA spectrum fixture</em></td>
+    <td align="center"><em>Time-resolved example spectrogram</em></td>
+  </tr>
+</table>
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Sources[Hardware and transport]
+        BLE[CT007-N over BLE]
+        CSV[CSV replay / simulator]
+        FUTURE[Future USB and BLE drivers]
+    end
+
+    DEVICE[Device interface and registry]
+    MODELS[Normalized domain models<br/>Reading · Spectrum · Spectrogram · Track]
+
+    subgraph Outputs[Storage, analysis, and presentation]
+        LIB[Local session library<br/>SPE · GPX · JSON]
+        IMPORT[Interchange readers<br/>SPE · Theremino · CSV]
+        ANALYSIS[Peak finding and isotope matching]
+        VIZ[Headless PNG plots<br/>spectrum · spectrogram]
+    end
+
+    PLANNED[Planned indexed / columnar backends<br/>SQLite · HDF5 · Parquet]
+
+    BLE --> DEVICE
+    CSV --> DEVICE
+    FUTURE -.-> DEVICE
+    DEVICE --> MODELS
+    IMPORT --> MODELS
+    MODELS --> LIB
+    MODELS --> ANALYSIS
+    MODELS --> VIZ
+    MODELS -.-> PLANNED
+```
+
+Drivers depend on the shared model—not the CLI or storage layer—so adding detector support is isolated to an implementation of `openrad.devices.base.Device`. See [the architecture guide](docs/ARCHITECTURE.md) for the interface and extension points.
+
+## Engineering highlights
+
+- **Strictly typed Python:** `mypy --strict`, Ruff, and pytest run against every change. Core APIs use dataclasses and typed driver/storage boundaries rather than device-specific dictionaries.
+- **Normalized scientific data:** drivers convert transport-specific payloads into readings, spectra, spectrogram frames, and tracks with explicit units (`cps`, `µSv/h`, `keV`, seconds, latitude/longitude) and energy calibration. Measurement-uncertainty propagation is not implemented yet and is called out in the [roadmap](docs/ROADMAP.md) rather than implied.
+- **Pluggable hardware backends:** a synchronous `Device` contract supports synthetic replay and real hardware. The CT007-N driver bridges Bleak's async BLE notifications to the common iterator API through a background event loop and thread-safe queue.
+- **Safety-conscious hardware handling:** the CT007-N's undocumented count protocol was reverse engineered from a physical unit. openrad refuses to invent a counts-to-dose conversion; dose remains unset (`0.0`) unless the user supplies a device-specific factor.
+- **Open interoperability:** ORTEC/IAEA `.spe`, Theremino MCA imports, GPX 1.1 with radiological extensions, and plain JSON metadata keep sessions inspectable without a proprietary database.
+- **Portable CI:** GitHub Actions exercises Python 3.10–3.12 on Linux, macOS, and Windows; visualization tests use Matplotlib's headless Agg backend.
+
+## Current capabilities
+
+| Area | Implemented now | Important limits |
+| --- | --- | --- |
+| Devices | CSV replay; GammaGuard CT007-N live BLE count stream | No RadiaCode or GQ GMC driver yet; CT007-N dose conversion requires a user-supplied factor |
+| Telemetry | Rich live dashboard or plain stream; optional GPS track capture | No live map renderer |
+| Spectroscopy | `.spe` read/write; Theremino MCA import; static spectrum and spectrogram PNGs | Device-to-live-spectrum accumulation is not implemented |
+| Analysis | Local-maxima peak finding and matching against fetched SandiaDecay gamma lines | Exploratory candidate matching, not lab-grade isotope identification |
+| Storage | Per-session local library with GPX, SPE, and JSON metadata | No database/index, GPX reader, HDF5, Parquet, or N42 export yet |
 
 ## Quickstart
 
-Requires [uv](https://docs.astral.sh/uv/). On NixOS (where manylinux wheels
-like numpy/matplotlib/ruff won't run against the system's libs out of the
-box), run `nix develop` first — it drops you into a shell with the right
-`LD_LIBRARY_PATH` and a nixpkgs-native `ruff`, then `uv` works normally.
+Requires [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv sync --extra dev
-
-# List registered device drivers
 uv run openrad devices
-
-# Stream a sample survey as if from a live device
 uv run openrad replay examples/sample_session.csv --speed 0
 ```
 
-Each `replay` run saves a session (GPS track as `.gpx`) to
-`~/.openrad/library/<session_id>/` unless run with `--no-save`.
+Each saved replay session is written under `~/.openrad/library/<session_id>/`. Use `--no-save` to skip it or `--library-dir PATH` to choose another location.
+
+Visualization dependencies are optional for library users:
 
 ```bash
-uv sync --extra viz  # matplotlib + numpy, only needed for rendering
-
-# Render a directory of .spe frames (one spectrum per time slice) as a
-# spectrogram: time on x, energy on y, color = counts (log-scaled)
-uv run openrad spectrogram examples/spectrogram --out spectrogram.png
-
-# Render a single spectrum (.spe or a Theremino MCA export) as a PNG histogram
+uv sync --extra viz
 uv run openrad spectrum tests/fixtures/theremino/tc99mfinal.txt --out spectrum.png
+uv run openrad spectrogram examples/spectrogram --out spectrogram.png
 ```
 
-```bash
-# Isotope ID needs a reference database, which isn't vendored in this repo
-# (it's ~6 MB of LGPL-2.1-licensed nuclear data — see the script for why).
-# Fetch your own copy once:
-uv run python scripts/fetch_isotope_database.py
+On NixOS, run commands inside the included development shell so binary Python wheels can find their runtime libraries:
 
-# Then match spectrum peaks against it:
+```bash
+nix develop
+uv sync --extra dev
+```
+
+### Isotope candidate matching
+
+The nuclear reference database is not vendored because it is roughly 6 MB and separately licensed. Fetch it once, then run `identify`:
+
+```bash
+uv run python scripts/fetch_isotope_database.py
 uv run openrad identify tests/fixtures/theremino/tc99mfinal.txt
 ```
 
-Identification is a simple local-maxima peak finder plus energy matching
-against known gamma lines (including short-lived daughters folded into
-their parent via a secular-equilibrium assumption — see
-`openrad/analysis/isotopes.py`) — a starting point for further
-investigation, not a lab-grade result.
+Identification uses local-maxima peak detection plus energy matching against known gamma lines, including short-lived daughters folded into their parent under a secular-equilibrium assumption. Treat the output as leads for investigation, not conclusions.
 
-There's no dedicated spectrogram file format — a spectrogram is just an
-ordered sequence of spectra, so a directory of `frame_00.spe`, `frame_01.spe`,
-... (see `examples/spectrogram/`, or regenerate it with
-`scripts/generate_example_spectrogram.py`) is what `openrad spectrogram`
-expects.
+### Live CT007-N telemetry
+
+Install the BLE extra, then connect by BLE address or advertised-name substring:
+
+```bash
+uv sync --extra ble
+uv run openrad ct007n "CT-N-13" --plain
+```
+
+The device does not expose a trustworthy counts-to-dose factor over the discovered characteristics. Pass `--counts-per-usv VALUE` only when you know the calibration for your unit.
 
 ## Development
 
@@ -90,28 +155,21 @@ uv run mypy
 uv run pytest
 ```
 
-## Project layout
-
-```
+```text
 src/openrad/
-  core/      Data model: Reading, Spectrum, Spectrogram, Track, DeviceInfo
-  devices/   Device interface, registry, and drivers (replay driver included)
-  storage/   .spe / .gpx / Theremino MCA read-write + local library + spectrogram loading
-  analysis/  Peak finding + isotope identification (needs a fetched reference database)
-  viz/       PNG rendering (spectrum + spectrogram heatmap), needs the "viz" extra
-  cli/       `openrad` command-line entrypoint
-tests/       pytest suite
-examples/    sample CSV + a demo spectrogram for the replay/spectrogram commands
-scripts/     one-off dev scripts (e.g. regenerating example data, fetching isotope data)
-docs/        architecture and roadmap
+  core/      Shared domain models and calibration
+  devices/   Device interface, registry, replay, and CT007-N BLE driver
+  storage/   SPE, GPX, Theremino, spectrogram loading, and local library
+  analysis/  Peak finding and isotope reference matching
+  viz/       Headless spectrum and spectrogram rendering
+  cli/       Typer command-line entrypoint
 ```
+
+For completed and planned work, see [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Contributing
 
-The most useful next contribution is a real hardware driver — see
-[docs/ROADMAP.md](docs/ROADMAP.md) and
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#adding-a-new-driver) for what
-that involves. Issues and PRs welcome.
+A new hardware driver is the highest-value contribution. Start with [`Device`](src/openrad/devices/base.py), the [architecture guide](docs/ARCHITECTURE.md#adding-a-new-driver), and the replay driver as a reference implementation. Issues and pull requests are welcome.
 
 ## License
 

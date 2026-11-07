@@ -1,50 +1,73 @@
 # Roadmap
 
-## MVP (this scaffold)
+This roadmap reflects the code on `main`. Checked items are implemented and covered by the current test suite; unchecked items are proposals or incomplete work.
 
-- [x] `Device` interface + registry
-- [x] Replay driver (CSV) for hardware-free development/testing
-- [x] Core data model (Reading, Spectrum, Track)
-- [x] `.spe` spectrum read/write
-- [x] `.gpx` track write
-- [x] Local library (per-session directory storage)
-- [x] CLI: `openrad devices`, `openrad replay <file>`
-- [x] Test suite + CI (ruff, mypy, pytest)
-- [x] Spectrogram view as a static PNG heatmap (`openrad spectrogram <dir>`,
-      `viz/spectrogram.py`) — see below, pulled forward from Phase 3
+## 0.1 foundation — implemented
 
-## Phase 2 — real hardware
+### Device and telemetry pipeline
 
-- [ ] RadiaCode RC-10x driver (BLE + USB), building on the reverse-engineered
-      protocol from [cdump/radiacode](https://github.com/cdump/radiacode)
-- [ ] GQ GMC-series driver (USB-serial)
-- [ ] `.spe` → live spectrum accumulation during a `stream()` session (not
-      just import/export)
-- [ ] `.gpx` reader (round-trip, for re-importing saved tracks)
+- [x] Typed `Device` interface (`connect`, `disconnect`, `stream`, optional `read_spectrum`)
+- [x] Driver registry for named, pluggable device implementations
+- [x] CSV replay driver for hardware-free development and deterministic tests
+- [x] GammaGuard CT007-N BLE driver for live pulse-count telemetry
+- [x] CT007-N advertised-name scanning and direct BLE-address connection
+- [x] Async Bleak-to-sync `Device.stream()` bridge using a background event loop and queue
+- [x] Live CLI dashboard plus low-contention plain-text mode
+- [x] Core models: `DeviceInfo`, `Reading`, `Spectrum`, `Spectrogram`, `Track`
+- [x] Optional GPS capture from readings into a saved track
 
-## Phase 3 — analysis features
+The CT007-N protocol implementation intentionally does **not** claim calibrated dose readings by default. Its counts-to-dose factor was not found in the observed BLE characteristics, so `dose_rate` remains `0.0` unless a user supplies `counts_per_usv` for their unit.
 
-- [ ] Isotope identification: peak-finding + matching against a nuclide
-      energy-line library (start with Cs-137, Co-60, K-40, Am-241, Na-22)
-- [ ] N42.42 XML export, for interop with InterSpec and other institutional
-      tools
-- [ ] Cs-137 food-activity screening mode
-- [ ] Live spectrogram capture: build a `Spectrogram` directly from a
-      `Device.stream()`/`read_spectrum()` session instead of only from a
-      pre-existing directory of `.spe` frames
+### Storage and interchange
 
-## Phase 4 — UI
+- [x] ORTEC/IAEA ASCII `.spe` spectrum read/write with energy calibration
+- [x] Theremino MCA pulse-height histogram import with fitted linear calibration
+- [x] GPX 1.1 track export with namespaced dose-rate and CPS extensions
+- [x] Local per-session library (`track.gpx`, `spectrum.spe`, `metadata.json` as available)
+- [x] Spectrogram loading from a time-ordered directory of `.spe` frames
+- [ ] GPX reader for saved-track round trips
+- [ ] Session index/search layer (likely SQLite) without replacing open on-disk formats
+- [ ] HDF5 or Parquet export for large time-series and spectrum collections
+- [ ] ANSI N42.42 XML export for InterSpec and institutional interoperability
 
-- [ ] Mapping UI: render a saved/live Track as a color-coded dose-rate track
-      on an OpenStreetMap/Leaflet basemap (avoids a Google Maps API
-      dependency/cost)
-- [ ] Desktop or web frontend on top of the `openrad` library (the CLI/core
-      split exists specifically so a GUI can reuse `devices`/`core`/`storage`
-      without duplicating logic)
-- [ ] "Gamma camera" — attach a photo to a spectrum/log entry
+### Analysis and visualization
+
+- [x] Static spectrum PNG rendering with calibrated energy or channel axis
+- [x] Static spectrogram PNG heatmap with log-scaled counts
+- [x] Local-maxima spectrum peak detection
+- [x] SandiaDecay XML reference-library loader
+- [x] Candidate isotope matching against gamma-line energies
+- [x] Short-lived daughter lines folded into parent candidates under a secular-equilibrium assumption
+- [ ] Quantified measurement uncertainty and uncertainty propagation through calibration/analysis
+- [ ] More robust peak fitting, background subtraction, confidence metrics, and detector-resolution models
+- [ ] Cs-137 food-activity screening workflow
+
+### Quality and portability
+
+- [x] Strict `mypy` checking
+- [x] Ruff linting
+- [x] Pytest coverage across models, drivers, storage, analysis, visualization, and CLI commands
+- [x] CI on Python 3.10–3.12 across Linux, macOS, and Windows
+- [x] Reproducible Nix development shell for NixOS contributors
+
+## Next — hardware and live acquisition
+
+- [ ] RadiaCode RC-10x driver over BLE and/or USB, building on the reverse-engineered protocol from [cdump/radiacode](https://github.com/cdump/radiacode)
+- [ ] GQ GMC-series USB-serial driver
+- [ ] Live spectrum acquisition through `Device.read_spectrum()`
+- [ ] Spectrum accumulation during a `stream()` session
+- [ ] Live spectrogram capture directly from a device session
+- [ ] Driver discovery via Python entry points for out-of-tree plugins
+- [ ] Fully async live CLI path to remove the remaining BLE/background-thread starvation risk
+
+## Later — mapping and user interfaces
+
+- [ ] Render saved or live tracks as dose-rate-colored paths on an OpenStreetMap/Leaflet basemap
+- [ ] Desktop or web frontend reusing the existing device/core/storage layers
+- [ ] Attach a photo and contextual metadata to a spectrum or log entry ("gamma camera")
+- [ ] Search-mode audio after suitable live hardware is available for testing
 
 ## Explicitly out of scope for now
 
-- Search-mode audio playback (device-side feature, low priority without
-  live hardware to test against)
-- Multi-user/cloud sync — this project is local-first by design
+- Multi-user or cloud synchronization: openrad is local-first by design
+- Claims of safety-grade dosimetry without traceable device calibration and uncertainty handling
