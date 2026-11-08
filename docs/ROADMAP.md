@@ -11,6 +11,8 @@ This roadmap reflects the code on `main`. Checked items are implemented and cove
 - [x] CSV replay driver for hardware-free development and deterministic tests
 - [x] GammaGuard CT007-N BLE driver for live pulse-count telemetry
 - [x] CT007-N advertised-name scanning and direct BLE-address connection
+- [x] RadiaCode RC-10x BLE and USB driver (`VS.DATA_BUF` telemetry + `VS.SPECTRUM` v0/v1 decoding, based on the [cdump/radiacode](https://github.com/cdump/radiacode) wire protocol)
+- [x] Live spectrum acquisition through `Device.read_spectrum()` (RadiaCode)
 - [x] Async Bleak-to-sync `Device.stream()` bridge using a background event loop and queue
 - [x] Live CLI dashboard plus low-contention plain-text mode
 - [x] Core models: `DeviceInfo`, `Reading`, `Spectrum`, `Spectrogram`, `Track`
@@ -52,9 +54,8 @@ The CT007-N protocol implementation intentionally does **not** claim calibrated 
 
 ## Next — hardware and live acquisition
 
-- [ ] RadiaCode RC-10x driver over BLE and/or USB, building on the reverse-engineered protocol from [cdump/radiacode](https://github.com/cdump/radiacode)
+- [ ] Hardware-in-the-loop verification of the RadiaCode RC-10x driver against a physical unit
 - [ ] GQ GMC-series USB-serial driver
-- [ ] Live spectrum acquisition through `Device.read_spectrum()`
 - [ ] Spectrum accumulation during a `stream()` session
 - [ ] Live spectrogram capture directly from a device session
 - [ ] Driver discovery via Python entry points for out-of-tree plugins
