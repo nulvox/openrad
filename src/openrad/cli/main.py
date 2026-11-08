@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,16 +26,38 @@ app = typer.Typer(help="openrad: an open-source toolkit for radiation detectors.
 console = Console()
 
 
+_DASHBOARD_MAX_ROWS = 20
+_DASHBOARD_MIN_REFRESH_S = 0.25
+
+
 def _read_spectrum_file(file: Path) -> Spectrum:
-    """Load a Spectrum, detecting the format (.spe vs. Theremino) from the extension."""
-    if file.suffix.lower() == ".spe":
+    """Load a Spectrum, detecting the format (.spe, .n42/.xml, or Theremino) from extension."""
+    suffix = file.suffix.lower()
+    if suffix == ".spe":
         from openrad.storage.spe import read_spe
 
         return read_spe(file)
 
+    if suffix in {".n42", ".xml"}:
+        from openrad.storage.n42 import read_n42
+
+        return read_n42(file)
+
     from openrad.storage.theremino import read_theremino
 
     return read_theremino(file)
+
+
+def _build_dashboard_table(title: str, rows: deque[tuple[str, str, str, str, str]]) -> Table:
+    table = Table(title=title)
+    table.add_column("time")
+    table.add_column("cps", justify="right")
+    table.add_column("dose (µSv/h)", justify="right")
+    table.add_column("lat")
+    table.add_column("lon")
+    for row in rows:
+        table.add_row(*row)
+    return table
 
 
 def _run_live_dashboard(
@@ -76,23 +100,33 @@ def _run_live_dashboard(
                 )
                 _handle_reading(reading)
         else:
-            table = Table(title=f"openrad live — {info.model}")
-            table.add_column("time")
-            table.add_column("cps", justify="right")
-            table.add_column("dose (µSv/h)", justify="right")
-            table.add_column("lat")
-            table.add_column("lon")
+            title = f"openrad live — {info.model}"
+            recent_rows: deque[tuple[str, str, str, str, str]] = deque(
+                maxlen=_DASHBOARD_MAX_ROWS
+            )
+            last_refresh = 0.0
 
-            with Live(table, console=console, refresh_per_second=4):
+            with Live(
+                _build_dashboard_table(title, recent_rows),
+                console=console,
+                auto_refresh=False,
+            ) as live:
                 for reading in device.stream():
-                    table.add_row(
-                        reading.timestamp.strftime("%H:%M:%S"),
-                        f"{reading.cps:.2f}",
-                        f"{reading.dose_rate:.3f}",
-                        f"{reading.latitude:.5f}" if reading.latitude is not None else "-",
-                        f"{reading.longitude:.5f}" if reading.longitude is not None else "-",
+                    recent_rows.append(
+                        (
+                            reading.timestamp.strftime("%H:%M:%S"),
+                            f"{reading.cps:.2f}",
+                            f"{reading.dose_rate:.3f}",
+                            f"{reading.latitude:.5f}" if reading.latitude is not None else "-",
+                            f"{reading.longitude:.5f}" if reading.longitude is not None else "-",
+                        )
                     )
                     _handle_reading(reading)
+                    now = time.monotonic()
+                    if now - last_refresh >= _DASHBOARD_MIN_REFRESH_S:
+                        live.update(_build_dashboard_table(title, recent_rows), refresh=True)
+                        last_refresh = now
+                live.update(_build_dashboard_table(title, recent_rows), refresh=True)
     finally:
         if save:
             try:
@@ -286,6 +320,21 @@ def spectrum(
 
     spectrum_data = _read_spectrum_file(file)
     render_spectrum_png(spectrum_data, out, energy_axis=not channel_axis)
+    console.print(f"Wrote {out}")
+
+
+@app.command("export-n42")
+def export_n42(
+    file: Path = typer.Argument(
+        ..., help="Input spectrum file (.spe, Theremino export, or .n42)"
+    ),
+    out: Path = typer.Option(Path("spectrum.n42"), help="Output ANSI N42.42 XML path"),
+) -> None:
+    """Convert a spectrum (.spe or Theremino) into ANSI N42.42 XML for InterSpec."""
+    from openrad.storage.n42 import write_n42
+
+    spectrum_data = _read_spectrum_file(file)
+    write_n42(spectrum_data, out)
     console.print(f"Wrote {out}")
 
 

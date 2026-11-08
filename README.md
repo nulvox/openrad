@@ -60,7 +60,7 @@ flowchart LR
 
     subgraph Outputs[Storage, analysis, and presentation]
         LIB[Local session library<br/>SPE · GPX · JSON]
-        IMPORT[Interchange readers<br/>SPE · Theremino · CSV]
+        IMPORT[Interchange readers & writers<br/>SPE · N42.42 · Theremino · GPX · CSV]
         ANALYSIS[Peak finding and isotope matching]
         VIZ[Headless PNG plots<br/>spectrum · spectrogram]
     end
@@ -87,7 +87,7 @@ Drivers depend on the shared model—not the CLI or storage layer—so adding de
 - **Normalized scientific data:** drivers convert transport-specific payloads into readings, spectra, spectrogram frames, and tracks with explicit units (`cps`, `µSv/h`, `keV`, seconds, latitude/longitude) and energy calibration. Measurement-uncertainty propagation is not implemented yet and is called out in the [roadmap](docs/ROADMAP.md) rather than implied.
 - **Pluggable hardware backends:** a synchronous `Device` contract supports synthetic replay and real hardware. The CT007-N driver bridges Bleak's async BLE notifications to the common iterator API through a background event loop and thread-safe queue.
 - **Safety-conscious hardware handling:** the CT007-N's undocumented count protocol was reverse engineered from a physical unit. openrad refuses to invent a counts-to-dose conversion; dose remains unset (`0.0`) unless the user supplies a device-specific factor.
-- **Open interoperability:** ORTEC/IAEA `.spe`, Theremino MCA imports, GPX 1.1 with radiological extensions, and plain JSON metadata keep sessions inspectable without a proprietary database.
+- **Open interoperability:** ORTEC/IAEA `.spe`, ANSI N42.42 XML (for InterSpec and institutional tools), Theremino MCA imports, GPX 1.1 read/write with radiological extensions, and plain JSON metadata keep sessions inspectable without a proprietary database.
 - **Portable CI:** GitHub Actions exercises Python 3.10–3.12 on Linux, macOS, and Windows; visualization tests use Matplotlib's headless Agg backend.
 
 ## Current capabilities
@@ -96,9 +96,9 @@ Drivers depend on the shared model—not the CLI or storage layer—so adding de
 | --- | --- | --- |
 | Devices | CSV replay; GammaGuard CT007-N live BLE count stream; RadiaCode RC-10x BLE/USB telemetry + spectrum driver | RadiaCode driver is tested against protocol fixtures while awaiting hardware-in-the-loop verification; CT007-N dose conversion requires a user-supplied factor; no GQ GMC driver yet |
 | Telemetry | Rich live dashboard or plain stream; optional GPS track capture | No live map renderer |
-| Spectroscopy | `.spe` read/write; Theremino MCA import; RadiaCode `read_spectrum()`; static spectrum and spectrogram PNGs | Live spectrogram frame accumulation is not implemented yet |
+| Spectroscopy | `.spe` and ANSI N42.42 `.n42` read/write; Theremino MCA import; RadiaCode `read_spectrum()`; static spectrum and spectrogram PNGs | Live spectrogram frame accumulation is not implemented yet |
 | Analysis | Local-maxima peak finding and matching against fetched SandiaDecay gamma lines | Exploratory candidate matching, not lab-grade isotope identification |
-| Storage | Per-session local library with GPX, SPE, and JSON metadata | No database/index, GPX reader, HDF5, Parquet, or N42 export yet |
+| Storage | Per-session local library with GPX, SPE, and JSON metadata (save + load round-trip); ANSI N42.42 export (`openrad export-n42`) | No database/index, HDF5, or Parquet export yet |
 
 ## Quickstart
 

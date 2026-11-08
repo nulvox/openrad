@@ -62,14 +62,16 @@ driver, not exposed outward.
 
 ## Storage formats
 
-- **Spectra → `.spe`** (ORTEC/IAEA ASCII). Chosen over ANSI N42.42 XML
-  because it's what most hobbyist gamma-spectroscopy tools (Theremino MCA,
-  Gamma Spectacular, Becquerel) actually read day to day. An N42 exporter
-  (for interop with [InterSpec](https://github.com/sandialabs/InterSpec)) is
-  a natural, self-contained follow-up in `storage/n42.py`.
-- **Tracks → `.gpx`** (GPX 1.1). The standard GPS track format; dose_rate and
-  cps ride along as namespaced `<extensions>` so the file still opens
-  correctly in any ordinary GPX-consuming tool.
+- **Spectra → `.spe` and `.n42`**. ORTEC/IAEA ASCII `.spe` (`storage/spe.py`)
+  is the default on-disk spectrum format because it is what hobbyist
+  gamma-spectroscopy tools (Theremino MCA, Gamma Spectacular, Becquerel)
+  read day to day. ANSI N42.42 XML (`storage/n42.py`, `openrad export-n42`)
+  is also supported for interoperability with institutional tools such as
+  [InterSpec](https://github.com/sandialabs/InterSpec).
+- **Tracks → `.gpx`** (`storage/gpx.py`, GPX 1.1 read/write). The standard
+  GPS track format; dose_rate and cps ride along as namespaced `<extensions>`
+  so the file still opens in any ordinary GPX-consuming tool and round-trips
+  cleanly back into `Track`.
 - **Library** (`storage/library.py`) is just a directory per session
   (`track.gpx`, `spectrum.spe`, `metadata.json`) — no database. Simple to
   inspect, sync, or back up; a session-indexed SQLite layer can be added
