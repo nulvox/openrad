@@ -41,11 +41,10 @@ because not every detector (or the replay driver) does gamma spectroscopy.
 
 `devices/replay.py` is the reference implementation: it reads a CSV and
 replays it as a live-feeling stream, which is what makes the rest of the
-system testable without hardware. The next real driver to add is almost
-certainly a RadiaCode RC-10x BLE/USB driver — the wire protocol has already
-been reverse-engineered by the community
-([cdump/radiacode](https://github.com/cdump/radiacode)), so that work is
-mostly porting/wrapping, not protocol archaeology.
+system testable without hardware. Real hardware drivers include
+`devices/ct007n.py` (GammaGuard CT007-N over BLE) and `devices/radiacode.py`
+(RadiaCode RC-10x over BLE and USB, implementing the wire protocol documented
+by [cdump/radiacode](https://github.com/cdump/radiacode)).
 
 ## Data model (`core/models.py`)
 

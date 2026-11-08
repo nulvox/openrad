@@ -15,6 +15,7 @@ from openrad.core.models import DeviceInfo, Reading, Spectrum, Track, TrackPoint
 from openrad.devices import registry
 from openrad.devices.base import Device
 from openrad.devices.ct007n import CT007NDevice  # noqa: F401  (registers "ct007n" driver)
+from openrad.devices.radiacode import RadiacodeDevice  # noqa: F401  (registers "radiacode" driver)
 from openrad.devices.replay import ReplayDevice  # noqa: F401  (registers "replay" driver)
 from openrad.storage.library import Library
 from openrad.storage.spectrogram import load_spectrogram_dir
@@ -61,6 +62,7 @@ def _run_live_dashboard(
                 )
             )
 
+    spectrum_data: Spectrum | None = None
     try:
         if plain:
             console.print(f"openrad live — {info.model}")
@@ -92,11 +94,21 @@ def _run_live_dashboard(
                     )
                     _handle_reading(reading)
     finally:
+        if save:
+            try:
+                spectrum_data = device.read_spectrum()
+            except Exception:  # noqa: BLE001 - best-effort snapshot before disconnect
+                spectrum_data = None
         device.disconnect()
 
-    if save and track.points:
+    if save and (track.points or spectrum_data is not None):
         library = Library(library_dir)
-        session_dir = library.save_session(session_id, track=track, device_info=vars(info))
+        session_dir = library.save_session(
+            session_id,
+            track=track if track.points else None,
+            spectrum=spectrum_data,
+            device_info=vars(info),
+        )
         console.print(f"Saved session to {session_dir}")
 
 
@@ -166,6 +178,69 @@ def ct007n(
     except ImportError as exc:
         console.print(str(exc))
         raise typer.Exit(code=1) from None
+
+    _run_live_dashboard(device, info, save=save, library_dir=library_dir, plain=plain)
+
+
+@app.command()
+def radiacode(
+    bluetooth: str | None = typer.Option(
+        None,
+        "--bluetooth",
+        "-b",
+        help='BLE MAC/UUID, or advertised name substring (e.g. "RadiaCode"). Omit for USB.',
+    ),
+    serial: str | None = typer.Option(
+        None, help="USB serial number when connecting over USB with multiple devices."
+    ),
+    poll_interval: float = typer.Option(1.0, help="Seconds between DATA_BUF polls"),
+    accumulated_spectrum: bool = typer.Option(
+        False, help="Read long-term accumulated spectrum (VS.SPEC_ACCUM) instead of current"
+    ),
+    reset_spectrum: bool = typer.Option(
+        False, help="Reset the device's current spectrum before streaming"
+    ),
+    spectrum_out: Path | None = typer.Option(
+        None, help="Fetch a single spectrum snapshot to this .spe file and exit"
+    ),
+    save: bool = typer.Option(True, help="Save the session (track + spectrum) to the library"),
+    library_dir: Path | None = typer.Option(None, help="Override the library directory"),
+    plain: bool = typer.Option(
+        True,
+        help="Print scrolling lines instead of a redrawing table (recommended over BLE)",
+    ),
+) -> None:
+    """Connect to a RadiaCode RC-10x over BLE or USB for live telemetry or spectrum export."""
+    try:
+        device = RadiacodeDevice(
+            bluetooth_mac=bluetooth,
+            serial_number=serial,
+            poll_interval_s=poll_interval,
+            accumulated_spectrum=accumulated_spectrum,
+        )
+        info = device.connect()
+    except ImportError as exc:
+        console.print(str(exc))
+        raise typer.Exit(code=1) from None
+
+    if spectrum_out is not None:
+        from openrad.storage.spe import write_spe
+
+        try:
+            if reset_spectrum:
+                device.reset_spectrum()
+            spec = device.read_spectrum()
+            if spec is None:
+                console.print("No spectrum returned by device.")
+                raise typer.Exit(code=1)
+            write_spe(spec, spectrum_out)
+            console.print(f"Wrote {spectrum_out}")
+        finally:
+            device.disconnect()
+        return
+
+    if reset_spectrum:
+        device.reset_spectrum()
 
     _run_live_dashboard(device, info, save=save, library_dir=library_dir, plain=plain)
 

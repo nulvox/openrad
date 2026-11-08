@@ -23,6 +23,9 @@ viz = [
 ble = [
     "bleak>=0.22",
 ]
+usb = [
+    "pyusb>=1.2",
+]
 dev = [
     "openrad[viz]",
     "openrad[ble]",

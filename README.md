@@ -6,13 +6,14 @@
 
 **openrad is a modular Python framework and CLI for radiation-detector hardware, gamma-spectrum analysis, and geotagged time-series telemetry.** It turns vendor-specific or replayed measurements into a small, typed domain model, then routes them to open file formats, a local session library, analysis tools, and headless plots.
 
-The project currently supports hardware-free CSV replay and live Bluetooth LE streaming from the GammaGuard CT007-N, plus `.spe`/Theremino spectrum import, GPX export, spectrograms, and reference-library peak matching. It is an early `0.1.x` project—not a calibrated radiation-safety instrument or a substitute for professional analysis.
+The project currently supports hardware-free CSV replay, live Bluetooth LE streaming from the GammaGuard CT007-N, and BLE/USB telemetry plus spectrum acquisition for RadiaCode RC-10x detectors, along with `.spe`/Theremino spectrum import, GPX export, spectrograms, and reference-library peak matching. It is an early `0.1.x` project—not a calibrated radiation-safety instrument or a substitute for professional analysis.
 
 ## See it work
 
 ```console
 $ uv run openrad devices
 - ct007n
+- radiacode
 - replay
 
 $ uv run openrad replay examples/sample_session.csv --speed 0 --plain --no-save
@@ -49,6 +50,7 @@ Wrote docs/assets/sample-spectrogram.png
 flowchart LR
     subgraph Sources[Hardware and transport]
         BLE[CT007-N over BLE]
+        RC[RadiaCode RC-10x over BLE / USB]
         CSV[CSV replay / simulator]
         FUTURE[Future USB and BLE drivers]
     end
@@ -66,6 +68,7 @@ flowchart LR
     PLANNED[Planned indexed / columnar backends<br/>SQLite · HDF5 · Parquet]
 
     BLE --> DEVICE
+    RC --> DEVICE
     CSV --> DEVICE
     FUTURE -.-> DEVICE
     DEVICE --> MODELS
@@ -91,9 +94,9 @@ Drivers depend on the shared model—not the CLI or storage layer—so adding de
 
 | Area | Implemented now | Important limits |
 | --- | --- | --- |
-| Devices | CSV replay; GammaGuard CT007-N live BLE count stream | No RadiaCode or GQ GMC driver yet; CT007-N dose conversion requires a user-supplied factor |
+| Devices | CSV replay; GammaGuard CT007-N live BLE count stream; RadiaCode RC-10x BLE/USB telemetry + spectrum driver | RadiaCode driver is tested against protocol fixtures while awaiting hardware-in-the-loop verification; CT007-N dose conversion requires a user-supplied factor; no GQ GMC driver yet |
 | Telemetry | Rich live dashboard or plain stream; optional GPS track capture | No live map renderer |
-| Spectroscopy | `.spe` read/write; Theremino MCA import; static spectrum and spectrogram PNGs | Device-to-live-spectrum accumulation is not implemented |
+| Spectroscopy | `.spe` read/write; Theremino MCA import; RadiaCode `read_spectrum()`; static spectrum and spectrogram PNGs | Live spectrogram frame accumulation is not implemented yet |
 | Analysis | Local-maxima peak finding and matching against fetched SandiaDecay gamma lines | Exploratory candidate matching, not lab-grade isotope identification |
 | Storage | Per-session local library with GPX, SPE, and JSON metadata | No database/index, GPX reader, HDF5, Parquet, or N42 export yet |
 
@@ -135,16 +138,20 @@ uv run openrad identify tests/fixtures/theremino/tc99mfinal.txt
 
 Identification uses local-maxima peak detection plus energy matching against known gamma lines, including short-lived daughters folded into their parent under a secular-equilibrium assumption. Treat the output as leads for investigation, not conclusions.
 
-### Live CT007-N telemetry
+### Live CT007-N and RadiaCode telemetry
 
-Install the BLE extra, then connect by BLE address or advertised-name substring:
+Install the BLE extra (or `usb` for USB connections), then connect by BLE address or advertised-name substring:
 
 ```bash
 uv sync --extra ble
 uv run openrad ct007n "CT-N-13" --plain
+uv run openrad radiacode --bluetooth "RadiaCode" --plain
+uv run openrad radiacode --bluetooth "RadiaCode" --spectrum-out snapshot.spe
 ```
 
-The device does not expose a trustworthy counts-to-dose factor over the discovered characteristics. Pass `--counts-per-usv VALUE` only when you know the calibration for your unit.
+The CT007-N does not expose a trustworthy counts-to-dose factor over the discovered characteristics. Pass `--counts-per-usv VALUE` only when you know the calibration for your unit.
+
+The RadiaCode driver implements the wire protocol reverse-engineered by Maxim Andreev ([@cdump](https://github.com/cdump)) and contributors in [`cdump/radiacode`](https://github.com/cdump/radiacode). It is currently validated against synthetic protocol fixtures while we wait on a physical unit—**live testers with a RadiaCode 101/102/103/103G over BLE or USB are very welcome** (please open an issue with your firmware version and results!).
 
 ## Development
 
@@ -158,7 +165,7 @@ uv run pytest
 ```text
 src/openrad/
   core/      Shared domain models and calibration
-  devices/   Device interface, registry, replay, and CT007-N BLE driver
+  devices/   Device interface, registry, replay, CT007-N BLE, and RadiaCode BLE/USB drivers
   storage/   SPE, GPX, Theremino, spectrogram loading, and local library
   analysis/  Peak finding and isotope reference matching
   viz/       Headless spectrum and spectrogram rendering
@@ -167,9 +174,15 @@ src/openrad/
 
 For completed and planned work, see [docs/ROADMAP.md](docs/ROADMAP.md).
 
-## Contributing
+## Contributing & Call for Hardware Testers
 
-A new hardware driver is the highest-value contribution. Start with [`Device`](src/openrad/devices/base.py), the [architecture guide](docs/ARCHITECTURE.md#adding-a-new-driver), and the replay driver as a reference implementation. Issues and pull requests are welcome.
+- **Live hardware testing needed:** If you own a **RadiaCode 101/102/103/103G** or **GammaGuard CT007-N**, testing `openrad radiacode` / `openrad ct007n` against real hardware and reporting how it behaves (BLE vs. USB, firmware version, spectrum export) is hugely helpful.
+- **New hardware drivers:** Adding another detector is the highest-value code contribution. Start with [`Device`](src/openrad/devices/base.py), the [architecture guide](docs/ARCHITECTURE.md#adding-a-new-driver), and the replay driver as a reference implementation. Issues and pull requests are welcome.
+
+## Acknowledgments
+
+- RadiaCode BLE/USB protocol support is built on the reverse-engineering work of Maxim Andreev ([@cdump](https://github.com/cdump)) and the [`cdump/radiacode`](https://github.com/cdump/radiacode) project.
+- Nuclear decay and gamma-line reference data is sourced from Sandia National Laboratories' [`SandiaDecay`](https://github.com/sandialabs/SandiaDecay) database.
 
 ## License
 
