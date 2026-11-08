@@ -23,14 +23,13 @@ The CT007-N protocol implementation intentionally does **not** claim calibrated 
 ### Storage and interchange
 
 - [x] ORTEC/IAEA ASCII `.spe` spectrum read/write with energy calibration
+- [x] ANSI N42.42 XML spectrum read/write (`storage/n42.py`, `openrad export-n42`) for InterSpec and institutional interoperability
 - [x] Theremino MCA pulse-height histogram import with fitted linear calibration
-- [x] GPX 1.1 track export with namespaced dose-rate and CPS extensions
-- [x] Local per-session library (`track.gpx`, `spectrum.spe`, `metadata.json` as available)
+- [x] GPX 1.1 track read/write with namespaced dose-rate and CPS extensions
+- [x] Local per-session library (`track.gpx`, `spectrum.spe`, `metadata.json` save + load round-trips)
 - [x] Spectrogram loading from a time-ordered directory of `.spe` frames
-- [ ] GPX reader for saved-track round trips
 - [ ] Session index/search layer (likely SQLite) without replacing open on-disk formats
 - [ ] HDF5 or Parquet export for large time-series and spectrum collections
-- [ ] ANSI N42.42 XML export for InterSpec and institutional interoperability
 
 ### Analysis and visualization
 

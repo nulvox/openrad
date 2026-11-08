@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from openrad.core.models import Spectrum, Track
-from openrad.storage.gpx import write_gpx
-from openrad.storage.spe import write_spe
+from openrad.storage.gpx import read_gpx, write_gpx
+from openrad.storage.spe import read_spe, write_spe
 
 DEFAULT_LIBRARY_DIR = Path.home() / ".openrad" / "library"
 
@@ -52,3 +52,17 @@ class Library:
 
     def list_sessions(self) -> list[str]:
         return sorted(p.name for p in self.root.iterdir() if p.is_dir())
+
+    def load_track(self, session_id: str) -> Track | None:
+        """Load `track.gpx` for `session_id` if present."""
+        track_path = self.root / session_id / "track.gpx"
+        if not track_path.exists():
+            return None
+        return read_gpx(track_path)
+
+    def load_spectrum(self, session_id: str) -> Spectrum | None:
+        """Load `spectrum.spe` for `session_id` if present."""
+        spectrum_path = self.root / session_id / "spectrum.spe"
+        if not spectrum_path.exists():
+            return None
+        return read_spe(spectrum_path)
